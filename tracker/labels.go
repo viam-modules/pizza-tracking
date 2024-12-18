@@ -6,10 +6,11 @@ package tracker
 
 import (
 	"fmt"
-	objdet "go.viam.com/rdk/vision/objectdetection"
 	"strconv"
 	"strings"
 	"time"
+
+	objdet "go.viam.com/rdk/vision/objectdetection"
 )
 
 // GetTimestamp will retrieve and format a timestamp to be YYYYMMDD_HHMMSS
@@ -19,15 +20,18 @@ func GetTimestamp() string {
 }
 
 // ReplaceLabel replaces the detection with an almost identical detection (new label)
-func ReplaceLabel(det objdet.Detection, label string) objdet.Detection {
-	return objdet.NewDetection(*det.BoundingBox(), det.Score(), label)
+func ReplaceLabel(tr *track, label string) *track {
+	det := objdet.NewDetection(*tr.Det.BoundingBox(), tr.Det.Score(), label)
+	newTrack := tr.clone()
+	newTrack.Det = det
+	return newTrack
 }
 
 // RenameFromMatches takes the output of the Hungarian matching algorithm and
 // gives the new detection the same label as the matching old detection.  Any new detections
 // found will be given a new name (and cleass counter will be updated)
 // Also return freshDets that are the fresh detections that were not matched with any detections in the previous frame.
-func (t *myTracker) RenameFromMatches(matches []int, matchinMtx [][]float64, oldDets, newDets []objdet.Detection) ([]objdet.Detection, []objdet.Detection) {
+func (t *myTracker) RenameFromMatches(matches []int, matchinMtx [][]float64, oldDets, newDets []*track) ([]*track, []*track) {
 	// Fill up a map with the indices of newDetections we have
 	notUsed := make(map[int]struct{})
 	for i, _ := range newDets {
@@ -38,7 +42,7 @@ func (t *myTracker) RenameFromMatches(matches []int, matchinMtx [][]float64, old
 		if newIdx != -1 {
 			if matchinMtx[oldIdx][newIdx] != 0 {
 				if newIdx >= 0 && newIdx < len(newDets) && oldIdx >= 0 && oldIdx < len(oldDets) {
-					newDets[newIdx] = ReplaceLabel(newDets[newIdx], oldDets[oldIdx].Label())
+					newDets[newIdx] = ReplaceLabel(newDets[newIdx], oldDets[oldIdx].Det.Label())
 					t.UpdateTrack(newDets[newIdx])
 					delete(notUsed, newIdx)
 				}
@@ -46,7 +50,7 @@ func (t *myTracker) RenameFromMatches(matches []int, matchinMtx [][]float64, old
 		}
 	}
 	// Go through all NEW things and add them in (name them and start new track)
-	var freshDets []objdet.Detection
+	var freshDets []*track
 	for idx := range notUsed {
 		newDet := t.RenameFirstTime(newDets[idx])
 		newDets[idx] = newDet
@@ -57,8 +61,8 @@ func (t *myTracker) RenameFromMatches(matches []int, matchinMtx [][]float64, old
 
 // RenameFirstTime should activate whenever a new object appears.
 // It will start or update a class counter for whichever class and create a new track.
-func (t *myTracker) RenameFirstTime(det objdet.Detection) objdet.Detection {
-	baseLabel := strings.ToLower(strings.Split(det.Label(), "_")[0])
+func (t *myTracker) RenameFirstTime(det *track) *track {
+	baseLabel := strings.ToLower(strings.Split(det.Det.Label(), "_")[0])
 	classCount, ok := t.classCounter[baseLabel]
 	if !ok {
 		t.classCounter[baseLabel] = 0
@@ -67,13 +71,13 @@ func (t *myTracker) RenameFirstTime(det objdet.Detection) objdet.Detection {
 	}
 	countLabel := baseLabel + "_" + strconv.Itoa(t.classCounter[baseLabel])
 	label := countLabel + "_" + GetTimestamp()
-	out := objdet.NewDetection(*det.BoundingBox(), det.Score(), label)
-	t.tracks[countLabel] = []objdet.Detection{out} // Start new track with this one
+	out := ReplaceLabel(det, label)
+	t.tracks[countLabel] = []*track{out} // Start new track with this one
 	return out
 }
 
-func (t *myTracker) UpdateTrack(det objdet.Detection) {
-	countLabel := strings.Join(strings.Split(det.Label(), "_")[0:2], "_")
+func (t *myTracker) UpdateTrack(det *track) {
+	countLabel := strings.Join(strings.Split(det.Det.Label(), "_")[0:2], "_")
 	track, ok := t.tracks[countLabel]
 	if ok {
 		t.tracks[countLabel] = append(track, det)
