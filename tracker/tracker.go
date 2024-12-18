@@ -163,16 +163,20 @@ func newTracker(ctx context.Context, deps resource.Dependencies, conf resource.C
 	var lostDetections []*track
 	for idx, _ := range matches {
 		if matches[idx] == -1 {
-			lostDetections = append(lostDetections, renamedOld[idx])
+			// if lost detections are not stable, discard them
+			if renamedOld[idx].isStable() {
+				lostDetections = append(lostDetections, renamedOld[idx])
+			}
 		}
 	}
 	t.lostDetectionsBuffer.AppendDets(lostDetections)
 
 	// Rename from temporal matches. New det copies old det's label
-	renamedNew, _ := t.RenameFromMatches(matches, matchMtx, renamedOld, filteredNew)
-	if len(renamedNew) > 0 {
+	renamedNew, newlyStable, _ := t.RenameFromMatches(matches, matchMtx, renamedOld, filteredNew)
+	if len(newlyStable) > 0 {
 		t.trigger()
 	}
+	renamedNew = append(renamedNew, newlyStable...)
 	t.lastDetections = renamedNew
 	t.currDetections.mutex.Lock()
 	t.currDetections.detections = renamedNew
@@ -215,6 +219,7 @@ func (t *myTracker) run(stream gostream.VideoStream, cancelableCtx context.Conte
 				continue
 			}
 			filteredDets := FilterDetections(t.chosenLabels, detections, t.minConfidence)
+			// all new tracks get a fresh persistence counter
 			filteredNew := newTracks(filteredDets, t.minTrackPersistence)
 
 			// Store oldDetection and lost detections in allDetections
@@ -228,23 +233,31 @@ func (t *myTracker) run(stream gostream.VideoStream, cancelableCtx context.Conte
 			matchMtx := t.BuildMatchingMatrix(allDetections, filteredNew)
 			HA, _ := hg.NewHungarianAlgorithm(matchMtx)
 			matches := HA.Execute()
-			// Store the lost detections in the buffer
+			// Store the lost detections in the buffer, drop lost detections
+			// if they were not considered stable
 			var lostDetections []*track
 			for idx, _ := range t.lastDetections {
 				if matches[idx] == -1 {
-					lostDetections = append(lostDetections, t.lastDetections[idx])
+					if t.lastDetections[idx].isStable() {
+						lostDetections = append(lostDetections, t.lastDetections[idx])
+					} else {
+						// drop lost detections from track list as well
+						countLabel := getTrackingLabel(t.lastDetections[idx])
+						delete(t.tracks, countLabel)
+					}
 				}
 			}
 			t.lostDetectionsBuffer.AppendDets(lostDetections)
-			// Rename from temporal matches. New det copies old det's label
-			renamedNew, freshDets := t.RenameFromMatches(matches, matchMtx, allDetections, filteredNew)
-			if len(freshDets) > 0 {
+			// Returns a new set of detections, from matching allDetections with the filteredNew
+			// All three outputs must be summed together to get the full set of new detections
+			renamedNew, newlyStable, freshDets := t.RenameFromMatches(matches, matchMtx, allDetections, filteredNew)
+			if len(newlyStable) > 0 {
 				//trigger classification and schedule "untrigger"
 				t.trigger()
 
 				// add the detections to the logs
 				t.allFreshObjects.mutex.Lock()
-				for _, det := range freshDets {
+				for _, det := range newlyStable {
 					to, err := newTrackedObjectFromLabel(det.Det.Label())
 					if err != nil {
 						t.logger.Error(err)
@@ -253,6 +266,8 @@ func (t *myTracker) run(stream gostream.VideoStream, cancelableCtx context.Conte
 				}
 				t.allFreshObjects.mutex.Unlock()
 			}
+			renamedNew = append(renamedNew, newlyStable...)
+			renamedNew = append(renamedNew, freshDets...)
 			t.lastDetections = renamedNew
 			t.currDetections.mutex.Lock()
 			t.currDetections.detections = renamedNew
