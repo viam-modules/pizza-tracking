@@ -1,5 +1,5 @@
-// Package object_tracker implements an object tracker as a Viam vision service
-package object_tracker
+// Package tracker implements an object tracker as a Viam vision service
+package tracker
 
 import (
 	"context"
@@ -27,12 +27,12 @@ import (
 
 // ModelName is the name of the model
 const (
-	ModelName              = "object-tracker"
+	ModelName              = "pizza-tracker"
 	NewObjectDetectedLabel = "new-object-detected"
 )
 
 var (
-	// Here is where we define your new model's colon-delimited-triplet (viam:vision:object-tracker)
+	// Here is where we define your new model's colon-delimited-triplet
 	Model                  = resource.NewModel("viam", "vision", ModelName)
 	errUnimplemented       = errors.New("unimplemented")
 	DefaultMinConfidence   = 0.2

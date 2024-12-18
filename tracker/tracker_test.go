@@ -1,4 +1,4 @@
-package object_tracker
+package tracker
 
 import (
 	hg "github.com/charles-haynes/munkres"

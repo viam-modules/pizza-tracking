@@ -1,4 +1,4 @@
-module github.com/viam-labs/object-tracker
+module github.com/viam-modules/pizza-tracking
 
 go 1.21.4
 

@@ -1,5 +1,5 @@
-// Package object_tracker implements an object tracker as a Viam vision service
-package object_tracker
+// Package tracker implements an object tracker as a Viam vision service
+package tracker
 
 import (
 	objdet "go.viam.com/rdk/vision/objectdetection"

@@ -1,8 +1,8 @@
-// Package object_tracker implements an object tracker as a Viam vision service.
+// Package tracker implements an object tracker as a Viam vision service.
 // This file contains methods that handle the label (or name) of a detection
 // If two detections are output with the same label, they are considered the same object
 // Labels are of the format classname_N_YYYYMMDD_HHMM
-package object_tracker
+package tracker
 
 import (
 	"fmt"

@@ -1,17 +1,17 @@
 {
-  "module_id": "viam:object-tracker",
+  "module_id": "viam:pizza-tracker",
   "visibility": "public",
-  "url": "https://github.com/viam-labs/object-tracking",
-  "description": "A module of the Viam vision service that implements object tracking ",
+  "url": "https://github.com/viam-modules/pizza-tracking",
+  "description": "A module of the Viam vision service that implements pizza tracking ",
   "models": [
     {
       "api": "rdk:service:vision",
-      "model": "viam:vision:object-tracker"
+      "model": "viam:vision:pizza-tracker"
     }
   ],
   "build": {
     "build": "make module.tar.gz",
     "arch" : ["linux/amd64", "linux/arm64", "darwin/arm64"]
   },
-  "entrypoint": "object-tracker"
+  "entrypoint": "pizza-tracker"
 }
