@@ -69,7 +69,6 @@ type myTracker struct {
 	triggerContext    context.Context
 
 	activeBackgroundWorkers sync.WaitGroup
-	minTrackPersistence     int
 	lastDetections          []*track
 	currDetections          currentDetections
 	currImg                 atomic.Pointer[image.Image]
@@ -81,15 +80,16 @@ type myTracker struct {
 	coolDown    float64
 	properties  vision.Properties
 
-	cam           camera.Camera
-	camName       string
-	detector      vision.Service
-	frequency     float64
-	minConfidence float64
-	chosenLabels  map[string]float64
-	classCounter  map[string]int
-	tracks        map[string][]*track
-	timeStats     []time.Duration
+	cam                 camera.Camera
+	camName             string
+	detector            vision.Service
+	frequency           float64
+	minConfidence       float64
+	chosenLabels        map[string]float64
+	classCounter        map[string]int
+	tracks              map[string][]*track
+	timeStats           []time.Duration
+	minTrackPersistence int
 }
 
 func newTracker(ctx context.Context, deps resource.Dependencies, conf resource.Config, logger logging.Logger) (vision.Service, error) {
@@ -113,7 +113,7 @@ func newTracker(ctx context.Context, deps resource.Dependencies, conf resource.C
 		return nil, err
 	}
 
-	//Defauly value for persistence
+	//Default value for persistence
 	if t.minTrackPersistence == 0 {
 		t.minTrackPersistence = DefaultMinTrackPersistence
 	}
@@ -163,7 +163,7 @@ func newTracker(ctx context.Context, deps resource.Dependencies, conf resource.C
 	var lostDetections []*track
 	for idx, _ := range matches {
 		if matches[idx] == -1 {
-			// if lost detections are not stable, discard them
+			// if lost detection is not stable, discard it
 			if renamedOld[idx].isStable() {
 				lostDetections = append(lostDetections, renamedOld[idx])
 			}
@@ -320,11 +320,11 @@ type Config struct {
 	CameraName          string             `json:"camera_name"`
 	DetectorName        string             `json:"detector_name"`
 	ChosenLabels        map[string]float64 `json:"chosen_labels"`
-	MinTrackPersistence int                `json:"min_track_persistence"`
 	MaxFrequency        float64            `json:"max_frequency_hz"`
 	MinConfidence       *float64           `json:"min_confidence,omitempty"`
 	TriggerCoolDown     *float64           `json:"trigger_cool_down_s,omitempty"`
 	BufferSize          int                `json:"buffer_size,omitempty"`
+	MinTrackPersistence int                `json:"min_track_persistence"`
 }
 
 // Validate validates the config and returns implicit dependencies,
