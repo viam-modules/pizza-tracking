@@ -1,4 +1,5 @@
 {
+  "$schema": "https://dl.viam.dev/module.schema.json",
   "module_id": "viam:pizza-tracker",
   "visibility": "public",
   "url": "https://github.com/viam-modules/pizza-tracking",
