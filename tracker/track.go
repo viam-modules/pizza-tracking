@@ -61,6 +61,16 @@ func (tr *track) addPersistence() {
 	}
 }
 
+func (tr *track) addClassToLabel() *track {
+	if tr.detClassification != nil {
+		// Find it all up to and including the date and time
+		parts := strings.Split(tr.Det.Label(), "_")
+		labelNoClass := strings.Join(parts[:4], "_")
+		return ReplaceLabel(tr, labelNoClass+"_"+tr.detClassification.Label())
+	}
+	return tr
+}
+
 // return only the bounding boxes associated with stable tracks
 func getStableDetections(tracks []*track) []objdet.Detection {
 	dets := make([]objdet.Detection, 0, len(tracks))
@@ -74,23 +84,26 @@ func getStableDetections(tracks []*track) []objdet.Detection {
 
 // trackedObject is the log info associated with the track that is stable
 type trackedObject struct {
-	FullLabel string
-	Label     string
-	Id        int
-	Time      string
+	FullLabel      string
+	Label          string
+	Id             int
+	Time           string
+	Classification string
 }
 
 func newTrackedObjectFromLabel(label string) (trackedObject, error) {
+	// Full label is in the form "object_count_date_time_classification"
 	parts := strings.Split(label, "_")
 	id, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return trackedObject{}, errors.Wrapf(err, "unable to parse label %v", label)
 	}
 	return trackedObject{
-		FullLabel: label,
-		Label:     parts[0],
-		Id:        id,
-		Time:      strings.Join(parts[2:], "_"),
+		FullLabel:      label,
+		Label:          parts[0],
+		Id:             id,
+		Time:           strings.Join(parts[2:4], "_"),
+		Classification: strings.Join(parts[4:], "_"),
 	}, nil
 
 }

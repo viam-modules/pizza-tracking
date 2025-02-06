@@ -110,6 +110,7 @@ func (t *myTracker) UpdateTrack(nextTrack, oldMatchedTrack *track) (*track, bool
 	wasStable := oldMatchedTrack.isStable()
 	newTrack := ReplaceBoundingBox(oldMatchedTrack, nextTrack.Det.BoundingBox())
 	newTrack.addPersistence()
+	
 	countLabel := getTrackingLabel(newTrack)
 	trackSlice, ok := t.tracks[countLabel]
 	if ok {
