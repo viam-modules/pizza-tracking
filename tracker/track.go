@@ -5,21 +5,23 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"go.viam.com/rdk/vision/classification"
 	objdet "go.viam.com/rdk/vision/objectdetection"
 )
 
 // A track stores information about the bounding box as well as its persistence properties
 // across frames
 type track struct {
-	Det              objdet.Detection
-	persistenceLimit int
-	persistenceCount int
-	stable           bool
+	Det               objdet.Detection
+	detClassification classification.Classification
+	persistenceLimit  int
+	persistenceCount  int
+	stable            bool
 }
 
 // newTrack turns a bounding box into a new track with a fresh persistence counter
 func newTrack(det objdet.Detection, lim int) *track {
-	return &track{det, lim, 0, false}
+	return &track{det, nil, lim, 0, false}
 }
 
 // newTracks turns a slice of bounding boxes into a track with a fresh persistence counter
@@ -35,6 +37,8 @@ func newTracks(dets []objdet.Detection, lim int) []*track {
 func (tr *track) clone() *track {
 	return &track{
 		tr.Det,
+
+		tr.detClassification,
 		tr.persistenceLimit,
 		tr.persistenceCount,
 		tr.stable,
