@@ -220,8 +220,12 @@ func (t *myTracker) run(stream gostream.VideoStream, cancelableCtx context.Conte
 				continue
 			}
 			filteredDets := FilterDetections(t.chosenLabels, detections, t.minConfidence)
+
 			// all new tracks get a fresh persistence counter
 			filteredNew := newTracks(filteredDets, t.minTrackPersistence)
+
+			// Here we will classify the cropped pizza detections and add that to the label
+			classifiedNew := classifyTracks(cancelableCtx, filteredNew, img, t.pizzaClassifier)
 
 			// Store oldDetection and lost detections in allDetections
 			allDetections := t.lastDetections
@@ -231,7 +235,7 @@ func (t *myTracker) run(stream gostream.VideoStream, cancelableCtx context.Conte
 				}
 			}
 			// Build and solve cost matrix via Munkres' method
-			matchMtx := t.BuildMatchingMatrix(allDetections, filteredNew)
+			matchMtx := t.BuildMatchingMatrix(allDetections, classifiedNew)
 			HA, _ := hg.NewHungarianAlgorithm(matchMtx)
 			matches := HA.Execute()
 			// Store the lost detections in the buffer, drop lost detections
