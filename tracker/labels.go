@@ -14,6 +14,11 @@ import (
 	objdet "go.viam.com/rdk/vision/objectdetection"
 )
 
+const (
+	PartialPizzaLabel = "partial"
+	FullPizzaLabel    = "full"
+)
+
 // GetTimestamp will retrieve and format a timestamp to be YYYYMMDD_HHMMSS
 func GetTimestamp() string {
 	currTime := time.Now()
@@ -53,13 +58,13 @@ func (t *myTracker) RenameFromMatches(matches []int, matchinMtx [][]float64, old
 		if newIdx != -1 {
 			if matchinMtx[oldIdx][newIdx] != 0 {
 				if newIdx >= 0 && newIdx < len(newDets) && oldIdx >= 0 && oldIdx < len(oldDets) {
-					
+
 					// If the old one says partial and the new one says full, this is a NEW track
 					if oldDets[oldIdx].detClassification != nil && newDets[newIdx].detClassification != nil {
-						if oldDets[oldIdx].isStable() && oldDets[oldIdx].detClassification.Label() == "partial" && 
-						newDets[newIdx].detClassification.Label() == "full" {
+						if oldDets[oldIdx].isStable() && oldDets[oldIdx].detClassification.Label() == PartialPizzaLabel &&
+							newDets[newIdx].detClassification.Label() == FullPizzaLabel {
 							// Skipping this one will mean newIdx stays in notUsed, so it will be added as a freshTrack
-							continue 
+							continue
 						}
 					}
 
@@ -123,7 +128,7 @@ func (t *myTracker) UpdateTrack(nextTrack, oldMatchedTrack *track) (*track, bool
 	if nextTrack.detClassification != nil {
 		newTrack = newTrack.addClassificationToLabel(nextTrack.detClassification.Label())
 	}
-	
+
 	countLabel := getTrackingLabel(newTrack)
 	trackSlice, ok := t.tracks[countLabel]
 	if ok {
