@@ -86,8 +86,13 @@ func (t *myTracker) RenameFirstTime(det *track) *track {
 	} else {
 		t.classCounter[baseLabel] = classCount + 1
 	}
+	var label string
 	countLabel := baseLabel + "_" + strconv.Itoa(t.classCounter[baseLabel])
-	label := countLabel + "_" + GetTimestamp()
+	if det.detClassification != nil {
+		label = countLabel + "_" + GetTimestamp() + "_" + det.detClassification.Label()
+	} else {
+		label = countLabel + "_" + GetTimestamp()
+	}
 	out := ReplaceLabel(det, label)
 	// start a new track, but it will be tentative, and may be removed if lost
 	// before persistence counter reaches "stable"

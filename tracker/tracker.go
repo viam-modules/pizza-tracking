@@ -144,7 +144,8 @@ func newTracker(ctx context.Context, deps resource.Dependencies, conf resource.C
 		}
 		filteredDets := FilterDetections(t.chosenLabels, detections, t.minConfidence)
 		tracks := newTracks(filteredDets, t.minTrackPersistence)
-		starterDets[i] = tracks
+		classifiedTracks := classifyTracks(ctx, tracks, img, t.pizzaClassifier, t.logger)
+		starterDets[i] = classifiedTracks
 	}
 	filteredOld := starterDets[0]
 	filteredNew := starterDets[1]
@@ -220,8 +221,12 @@ func (t *myTracker) run(stream gostream.VideoStream, cancelableCtx context.Conte
 				continue
 			}
 			filteredDets := FilterDetections(t.chosenLabels, detections, t.minConfidence)
+
 			// all new tracks get a fresh persistence counter
 			filteredNew := newTracks(filteredDets, t.minTrackPersistence)
+
+			// Here we will classify the cropped pizza detections and add that to the label
+			classifiedNew := classifyTracks(cancelableCtx, filteredNew, img, t.pizzaClassifier, t.logger)
 
 			// Store oldDetection and lost detections in allDetections
 			allDetections := t.lastDetections
@@ -231,7 +236,7 @@ func (t *myTracker) run(stream gostream.VideoStream, cancelableCtx context.Conte
 				}
 			}
 			// Build and solve cost matrix via Munkres' method
-			matchMtx := t.BuildMatchingMatrix(allDetections, filteredNew)
+			matchMtx := t.BuildMatchingMatrix(allDetections, classifiedNew)
 			HA, _ := hg.NewHungarianAlgorithm(matchMtx)
 			matches := HA.Execute()
 			// Store the lost detections in the buffer, drop lost detections
@@ -251,7 +256,7 @@ func (t *myTracker) run(stream gostream.VideoStream, cancelableCtx context.Conte
 			t.lostDetectionsBuffer.AppendDets(lostDetections)
 			// Returns a new set of detections, from matching allDetections with the filteredNew
 			// All three outputs must be summed together to get the full set of new detections
-			renamedNew, newlyStable, freshDets := t.RenameFromMatches(matches, matchMtx, allDetections, filteredNew)
+			renamedNew, newlyStable, freshDets := t.RenameFromMatches(matches, matchMtx, allDetections, classifiedNew)
 			if len(newlyStable) > 0 {
 				//trigger classification and schedule "untrigger"
 				t.trigger()
