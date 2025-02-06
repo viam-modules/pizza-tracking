@@ -144,7 +144,7 @@ func newTracker(ctx context.Context, deps resource.Dependencies, conf resource.C
 		}
 		filteredDets := FilterDetections(t.chosenLabels, detections, t.minConfidence)
 		tracks := newTracks(filteredDets, t.minTrackPersistence)
-		classifiedTracks := classifyTracks(ctx, tracks, img, t.pizzaClassifier)
+		classifiedTracks := classifyTracks(ctx, tracks, img, t.pizzaClassifier, t.logger)
 		starterDets[i] = classifiedTracks
 	}
 	filteredOld := starterDets[0]
