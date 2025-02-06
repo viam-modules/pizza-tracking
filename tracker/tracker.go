@@ -226,7 +226,7 @@ func (t *myTracker) run(stream gostream.VideoStream, cancelableCtx context.Conte
 			filteredNew := newTracks(filteredDets, t.minTrackPersistence)
 
 			// Here we will classify the cropped pizza detections and add that to the label
-			classifiedNew := classifyTracks(cancelableCtx, filteredNew, img, t.pizzaClassifier)
+			classifiedNew := classifyTracks(cancelableCtx, filteredNew, img, t.pizzaClassifier, t.logger)
 
 			// Store oldDetection and lost detections in allDetections
 			allDetections := t.lastDetections
