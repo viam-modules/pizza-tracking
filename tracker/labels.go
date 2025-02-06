@@ -53,6 +53,16 @@ func (t *myTracker) RenameFromMatches(matches []int, matchinMtx [][]float64, old
 		if newIdx != -1 {
 			if matchinMtx[oldIdx][newIdx] != 0 {
 				if newIdx >= 0 && newIdx < len(newDets) && oldIdx >= 0 && oldIdx < len(oldDets) {
+					
+					// If the old one says partial and the new one says full, this is a NEW track
+					if oldDets[oldIdx].detClassification != nil && newDets[newIdx].detClassification != nil {
+						if oldDets[oldIdx].isStable() && oldDets[oldIdx].detClassification.Label() == "partial" && 
+						newDets[newIdx].detClassification.Label() == "full" {
+							// Skipping this one will mean newIdx stays in notUsed, so it will be added as a freshTrack
+							continue 
+						}
+					}
+
 					// take the old track, clone it, and update their Bounding Box
 					// to the new track. Increment its persistence counter.
 					updatedTrack, newlyStable := t.UpdateTrack(newDets[newIdx], oldDets[oldIdx])
@@ -110,6 +120,9 @@ func (t *myTracker) UpdateTrack(nextTrack, oldMatchedTrack *track) (*track, bool
 	wasStable := oldMatchedTrack.isStable()
 	newTrack := ReplaceBoundingBox(oldMatchedTrack, nextTrack.Det.BoundingBox())
 	newTrack.addPersistence()
+	if nextTrack.detClassification != nil {
+		newTrack = newTrack.addClassificationToLabel(nextTrack.detClassification.Label())
+	}
 	
 	countLabel := getTrackingLabel(newTrack)
 	trackSlice, ok := t.tracks[countLabel]

@@ -27,7 +27,12 @@ func classifyTracks(ctx context.Context, tracks []*track, img image.Image, class
 			logger.Warnf("error classifying detection: %v", err)
 			continue
 		}
-		tr.detClassification = out[0]
+		sortedOut, err := out.TopN(1)
+		if err != nil {
+			logger.Warnf("error sorting classifications: %v", err)
+			continue
+		}
+		tr.detClassification = sortedOut[0]
 	}
 	return tracks
 }

@@ -61,12 +61,12 @@ func (tr *track) addPersistence() {
 	}
 }
 
-func (tr *track) addClassToLabel() *track {
+func (tr *track) addClassificationToLabel(c string) *track {
 	if tr.detClassification != nil {
 		// Find it all up to and including the date and time
 		parts := strings.Split(tr.Det.Label(), "_")
 		labelNoClass := strings.Join(parts[:4], "_")
-		return ReplaceLabel(tr, labelNoClass+"_"+tr.detClassification.Label())
+		return ReplaceLabel(tr, labelNoClass+"_"+c)
 	}
 	return tr
 }
