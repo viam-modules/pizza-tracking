@@ -83,6 +83,7 @@ type myTracker struct {
 	cam                 camera.Camera
 	camName             string
 	detector            vision.Service
+	pizzaClassifier     vision.Service
 	frequency           float64
 	minConfidence       float64
 	chosenLabels        map[string]float64
@@ -319,6 +320,7 @@ func (t *myTracker) trigger() {
 type Config struct {
 	CameraName          string             `json:"camera_name"`
 	DetectorName        string             `json:"detector_name"`
+	PizzaClassifierName string             `json:"pizza_classifier_name,omitempty"`
 	ChosenLabels        map[string]float64 `json:"chosen_labels"`
 	MaxFrequency        float64            `json:"max_frequency_hz"`
 	MinConfidence       *float64           `json:"min_confidence,omitempty"`
@@ -341,8 +343,12 @@ func (cfg *Config) Validate(path string) ([]string, error) {
 		return nil, fmt.Errorf(`expected "detector_name" attribute for object tracker %q`, path)
 	}
 
+	if cfg.PizzaClassifierName == "" {
+		return []string{cfg.CameraName, cfg.DetectorName}, nil
+	}
+
 	// Return the resource names so that newTracker can access them as dependencies.
-	return []string{cfg.CameraName, cfg.DetectorName}, nil
+	return []string{cfg.CameraName, cfg.DetectorName, cfg.PizzaClassifierName}, nil
 }
 
 // Reconfigure reconfigures with new settings.
@@ -405,8 +411,15 @@ func (t *myTracker) Reconfigure(ctx context.Context, deps resource.Dependencies,
 	}
 	t.detector, err = vision.FromDependencies(deps, trackerConfig.DetectorName)
 	if err != nil {
-		return errors.Wrapf(err, "unable to get camera %v for object tracker", trackerConfig.DetectorName)
+		return errors.Wrapf(err, "unable to get detector %v for object tracker", trackerConfig.DetectorName)
 	}
+	if trackerConfig.PizzaClassifierName != "" {
+		t.pizzaClassifier, err = vision.FromDependencies(deps, trackerConfig.PizzaClassifierName)
+		if err != nil {
+			return errors.Wrapf(err, "unable to get pizzaClassifier %v for object tracker", trackerConfig.PizzaClassifierName)
+		}
+	}
+
 	return nil
 }
 
