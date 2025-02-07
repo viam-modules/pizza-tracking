@@ -114,17 +114,6 @@ func getTracker() (vision.Service, error) {
 
 }
 
-func TestDetections(t *testing.T) {
-	tracker, err := getTracker()
-	test.That(t, tracker, test.ShouldNotBeNil)
-	test.That(t, err, test.ShouldBeNil)
-
-	ctx := context.Background()
-	props, err := tracker.Detections(ctx, nil, nil)
-
-	fmt.Println(props)
-}
-
 func TestGetProperties(t *testing.T) {
 	tracker, err := getTracker()
 	test.That(t, tracker, test.ShouldNotBeNil)
