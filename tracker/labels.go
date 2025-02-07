@@ -49,36 +49,9 @@ func (t *myTracker) RenameFromMatches(matches []int, matchinMtx [][]float64, old
 	for i, _ := range newDets {
 		notUsed[i] = struct{}{}
 	}
-	// Go through valid matches and update name and track
-	updatedTracks := make([]*track, 0)
-	newlyStableTracks := make([]*track, 0)
-	for oldIdx, newIdx := range matches {
-		if newIdx != -1 {
-			if matchinMtx[oldIdx][newIdx] != 0 {
-				if newIdx >= 0 && newIdx < len(newDets) && oldIdx >= 0 && oldIdx < len(oldDets) {
 
-					// If the old one says partial and the new one says full, this is a NEW track
-					if oldDets[oldIdx].detClassification != nil && newDets[newIdx].detClassification != nil {
-						if oldDets[oldIdx].isStable() && oldDets[oldIdx].detClassification.Label() == PartialPizzaLabel &&
-							newDets[newIdx].detClassification.Label() == FullPizzaLabel {
-							// Skipping this one will mean newIdx stays in notUsed, so it will be added as a freshTrack
-							continue
-						}
-					}
+	updatedTracks, newlyStableTracks, notUsed := t.updateMatchedTracks(matches, matchinMtx, oldDets, newDets, notUsed)
 
-					// take the old track, clone it, and update their Bounding Box
-					// to the new track. Increment its persistence counter.
-					updatedTrack, newlyStable := t.UpdateTrack(newDets[newIdx], oldDets[oldIdx])
-					if newlyStable {
-						newlyStableTracks = append(newlyStableTracks, updatedTrack)
-					} else {
-						updatedTracks = append(updatedTracks, updatedTrack)
-					}
-					delete(notUsed, newIdx)
-				}
-			}
-		}
-	}
 	// Go through all NEW things and add them in (name them and start new track)
 	freshTracks := make([]*track, 0)
 	for idx := range notUsed {
@@ -135,4 +108,45 @@ func (t *myTracker) UpdateTrack(nextTrack, oldMatchedTrack *track) (*track, bool
 	isNowStable := newTrack.isStable()
 	newlyStable := wasStable != isNowStable
 	return newTrack, newlyStable
+}
+
+// updateMatchedTracks sifts through the matching matrix and sends the correct tracks to be updated
+// Explicity prevents a match between a track with a "partial" classification and another with a  "full" classification
+// Returns which tracks were simply updated, which JUST became stable, and which were unused.
+func (t *myTracker) updateMatchedTracks(matches []int, matchinMtx [][]float64, oldDets, newDets []*track,
+	notUsed map[int]struct{}) ([]*track, []*track, map[int]struct{}) {
+
+	// Go through valid matches and update name and track
+	updatedTracks := make([]*track, 0)
+	newlyStableTracks := make([]*track, 0)
+	for oldIdx, newIdx := range matches {
+		if newIdx != -1 {
+			if matchinMtx[oldIdx][newIdx] != 0 {
+				if newIdx >= 0 && newIdx < len(newDets) && oldIdx >= 0 && oldIdx < len(oldDets) {
+
+					// If the old one says partial and the new one says full, this is a NEW track
+					if oldDets[oldIdx].detClassification != nil && newDets[newIdx].detClassification != nil {
+						if oldDets[oldIdx].isStable() && oldDets[oldIdx].detClassification.Label() == PartialPizzaLabel &&
+							newDets[newIdx].detClassification.Label() == FullPizzaLabel {
+							// Skipping this one will mean newIdx stays in notUsed, so it will be added as a freshTrack
+							continue
+						}
+					}
+
+					// take the old track, clone it, and update their Bounding Box
+					// to the new track. Increment its persistence counter.
+					updatedTrack, newlyStable := t.UpdateTrack(newDets[newIdx], oldDets[oldIdx])
+					if newlyStable {
+						newlyStableTracks = append(newlyStableTracks, updatedTrack)
+					} else {
+						updatedTracks = append(updatedTracks, updatedTrack)
+					}
+					delete(notUsed, newIdx)
+				}
+			}
+		}
+	}
+
+	return updatedTracks, newlyStableTracks, notUsed
+
 }
