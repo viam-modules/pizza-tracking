@@ -83,6 +83,7 @@ type myTracker struct {
 	cam                 camera.Camera
 	camName             string
 	detector            vision.Service
+	pizzaClassifier     vision.Service
 	frequency           float64
 	minConfidence       float64
 	chosenLabels        map[string]float64
@@ -143,7 +144,8 @@ func newTracker(ctx context.Context, deps resource.Dependencies, conf resource.C
 		}
 		filteredDets := FilterDetections(t.chosenLabels, detections, t.minConfidence)
 		tracks := newTracks(filteredDets, t.minTrackPersistence)
-		starterDets[i] = tracks
+		classifiedTracks := classifyTracks(ctx, tracks, img, t.pizzaClassifier, t.logger)
+		starterDets[i] = classifiedTracks
 	}
 	filteredOld := starterDets[0]
 	filteredNew := starterDets[1]
@@ -219,16 +221,20 @@ func (t *myTracker) run(stream gostream.VideoStream, cancelableCtx context.Conte
 				continue
 			}
 			filteredDets := FilterDetections(t.chosenLabels, detections, t.minConfidence)
+
 			// all new tracks get a fresh persistence counter
 			filteredNew := newTracks(filteredDets, t.minTrackPersistence)
+
+			// Here we will classify the cropped pizza detections and add that to the label
+			classifiedNew := classifyTracks(cancelableCtx, filteredNew, img, t.pizzaClassifier, t.logger)
 
 			// Store oldDetection and lost detections in allDetections
 			allDetections := t.lastDetections
 			for _, dets := range t.lostDetectionsBuffer.detections {
-                allDetections = append(allDetections, dets...)
+				allDetections = append(allDetections, dets...)
 			}
 			// Build and solve cost matrix via Munkres' method
-			matchMtx := t.BuildMatchingMatrix(allDetections, filteredNew)
+			matchMtx := t.BuildMatchingMatrix(allDetections, classifiedNew)
 			HA, _ := hg.NewHungarianAlgorithm(matchMtx)
 			matches := HA.Execute()
 			// Store the lost detections in the buffer, drop lost detections
@@ -248,7 +254,7 @@ func (t *myTracker) run(stream gostream.VideoStream, cancelableCtx context.Conte
 			t.lostDetectionsBuffer.AppendDets(lostDetections)
 			// Returns a new set of detections, from matching allDetections with the filteredNew
 			// All three outputs must be summed together to get the full set of new detections
-			renamedNew, newlyStable, freshDets := t.RenameFromMatches(matches, matchMtx, allDetections, filteredNew)
+			renamedNew, newlyStable, freshDets := t.RenameFromMatches(matches, matchMtx, allDetections, classifiedNew)
 			if len(newlyStable) > 0 {
 				//trigger classification and schedule "untrigger"
 				t.trigger()
@@ -317,6 +323,7 @@ func (t *myTracker) trigger() {
 type Config struct {
 	CameraName          string             `json:"camera_name"`
 	DetectorName        string             `json:"detector_name"`
+	PizzaClassifierName string             `json:"pizza_classifier_name,omitempty"`
 	ChosenLabels        map[string]float64 `json:"chosen_labels"`
 	MaxFrequency        float64            `json:"max_frequency_hz"`
 	MinConfidence       *float64           `json:"min_confidence,omitempty"`
@@ -339,8 +346,12 @@ func (cfg *Config) Validate(path string) ([]string, error) {
 		return nil, fmt.Errorf(`expected "detector_name" attribute for object tracker %q`, path)
 	}
 
+	if cfg.PizzaClassifierName == "" {
+		return []string{cfg.CameraName, cfg.DetectorName}, nil
+	}
+
 	// Return the resource names so that newTracker can access them as dependencies.
-	return []string{cfg.CameraName, cfg.DetectorName}, nil
+	return []string{cfg.CameraName, cfg.DetectorName, cfg.PizzaClassifierName}, nil
 }
 
 // Reconfigure reconfigures with new settings.
@@ -403,8 +414,15 @@ func (t *myTracker) Reconfigure(ctx context.Context, deps resource.Dependencies,
 	}
 	t.detector, err = vision.FromDependencies(deps, trackerConfig.DetectorName)
 	if err != nil {
-		return errors.Wrapf(err, "unable to get camera %v for object tracker", trackerConfig.DetectorName)
+		return errors.Wrapf(err, "unable to get detector %v for object tracker", trackerConfig.DetectorName)
 	}
+	if trackerConfig.PizzaClassifierName != "" {
+		t.pizzaClassifier, err = vision.FromDependencies(deps, trackerConfig.PizzaClassifierName)
+		if err != nil {
+			return errors.Wrapf(err, "unable to get pizzaClassifier %v for object tracker", trackerConfig.PizzaClassifierName)
+		}
+	}
+
 	return nil
 }
 

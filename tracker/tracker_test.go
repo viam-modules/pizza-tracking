@@ -1,11 +1,21 @@
 package tracker
 
 import (
+	"context"
+	"fmt"
 	"image"
+	"path/filepath"
 	"testing"
 
 	hg "github.com/charles-haynes/munkres"
+	"go.viam.com/rdk/components/camera"
+	"go.viam.com/rdk/gostream"
+	"go.viam.com/rdk/logging"
+	"go.viam.com/rdk/resource"
+	"go.viam.com/rdk/rimage"
 	"go.viam.com/rdk/services/vision"
+	"go.viam.com/rdk/testutils/inject"
+	"go.viam.com/rdk/vision/classification"
 	objdet "go.viam.com/rdk/vision/objectdetection"
 	"go.viam.com/test"
 )
@@ -26,8 +36,132 @@ func (fd *FakeDetector) fakeDetections() []objdet.Detection {
 	return fd.res[fd.it-1]
 }
 
+type FakeCam struct {
+	img image.Image
+}
+
+func (fc *FakeCam) Next(ctx context.Context) (data image.Image, release func(), err error) {
+	fP, _ := filepath.Abs("../test_files/dogscute.jpeg")
+	fc.img, err = rimage.NewImageFromFile(fP)
+	if err != nil {
+		fmt.Println(err)
+		return nil, nil, err
+	}
+	return fc.img, nil, nil
+}
+
+func (fc *FakeCam) Close(ctx context.Context) error {
+	return nil
+}
+
 func checkLabel(t *testing.T, value *track, target string) {
 	test.That(t, value.Det.Label()[:len(target)], test.ShouldEqual, target)
+}
+
+func getTracker() (vision.Service, error) {
+
+	ctx := context.Background()
+	logger := logging.NewLogger("test")
+
+	det0 := objdet.NewDetection(image.Rect(0, 0, 10, 10), 1, LabelDet0)
+	det1 := objdet.NewDetection(image.Rect(20, 20, 30, 30), 1, LabelDet1)
+	det1_1 := objdet.NewDetection(image.Rect(22, 22, 33, 33), 1, LabelDet1)
+	detsT0 := []objdet.Detection{det0, det1}
+	detsT1 := []objdet.Detection{det0}
+	detsT2 := []objdet.Detection{det1_1}
+	detsT3 := []objdet.Detection{det0}
+
+	fd := &FakeDetector{
+		res: [][]objdet.Detection{detsT0, detsT1, detsT2, detsT3},
+	}
+	fc := &FakeCam{}
+	cam := &inject.Camera{
+		StreamFunc: func(ctx context.Context, errHandlers ...gostream.ErrorHandler) (gostream.VideoStream, error) {
+			return fc, nil
+		},
+	}
+	detector := &inject.VisionService{
+		DetectionsFunc: func(ctx context.Context, img image.Image, extra map[string]interface{}) ([]objdet.Detection, error) {
+			return fd.fakeDetections(), nil
+		},
+	}
+	classifier := &inject.VisionService{
+		ClassificationsFunc: func(ctx context.Context, img image.Image, n int, extra map[string]interface{}) (classification.Classifications, error) {
+			return []classification.Classification{classification.NewClassification(0.99, "bald")}, nil
+		},
+	}
+
+	//reg, ok := resource.LookupRegistration(vision.API, Model)
+
+	OTConfig := &Config{CameraName: "camera", DetectorName: "detector", PizzaClassifierName: "classifier"}
+	realConf := resource.Config{
+		Name:                "test-objtracker",
+		API:                 vision.API,
+		ConvertedAttributes: OTConfig,
+	}
+	deps := resource.Dependencies{}
+	deps[camera.Named("camera")] = cam
+	deps[vision.Named("detector")] = detector
+	deps[vision.Named("classifier")] = classifier
+
+	out, err := newTracker(ctx, deps, realConf, logger)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+
+	return out, nil
+
+}
+
+func TestGetProperties(t *testing.T) {
+	tracker, err := getTracker()
+	test.That(t, tracker, test.ShouldNotBeNil)
+	test.That(t, err, test.ShouldBeNil)
+
+	ctx := context.Background()
+	props, err := tracker.GetProperties(ctx, nil)
+	test.That(t, props.ClassificationSupported, test.ShouldEqual, true)
+	test.That(t, props.DetectionSupported, test.ShouldEqual, true)
+	test.That(t, props.ObjectPCDsSupported, test.ShouldEqual, false)
+	test.That(t, err, test.ShouldBeNil)
+}
+
+func TestValidate(t *testing.T) {
+	// empty cfg
+	emptyCfg := Config{}
+	emptyDeps, err := emptyCfg.Validate("")
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, emptyDeps, test.ShouldBeNil)
+
+	// good cfg
+	goodCfg := Config{CameraName: "camera", DetectorName: "detector"}
+	goodDeps, err := goodCfg.Validate("")
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, goodDeps, test.ShouldNotBeNil)
+
+	// another good cfg
+	goodCfg2 := Config{CameraName: "camera", DetectorName: "detector", PizzaClassifierName: "classifier"}
+	goodDeps, err = goodCfg2.Validate("")
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, goodDeps, test.ShouldNotBeNil)
+
+	// bad cfg
+	badCfg := Config{CameraName: "camera"}
+	badDeps, err := badCfg.Validate("")
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, badDeps, test.ShouldBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "detector_name")
+}
+
+func TestEmptyConfig(t *testing.T) {
+	ctx := context.Background()
+	emptyCfg := resource.Config{}
+	logger := logging.NewTestLogger(t)
+
+	emptyGot, err := newTracker(ctx, nil, emptyCfg, logger)
+	test.That(t, emptyGot, test.ShouldBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "proper config")
 }
 
 func TestTracker(t *testing.T) {
@@ -105,7 +239,7 @@ func TestTracker(t *testing.T) {
 	// Store oldDetection and lost detections in allDetections
 	allDetections := fakeTracker.lastDetections
 	for _, dets := range fakeTracker.lostDetectionsBuffer.detections {
-        allDetections = append(allDetections, dets...)
+		allDetections = append(allDetections, dets...)
 	}
 
 	// Build and solve cost matrix via Munkres' method
@@ -149,7 +283,7 @@ func TestTracker(t *testing.T) {
 	// Store oldDetection and lost detections in allDetections
 	allDetections = fakeTracker.lastDetections
 	for _, dets := range fakeTracker.lostDetectionsBuffer.detections {
-        allDetections = append(allDetections, dets...)
+		allDetections = append(allDetections, dets...)
 	}
 
 	// Build and solve cost matrix via Munkres' method

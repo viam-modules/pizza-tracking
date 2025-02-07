@@ -5,21 +5,23 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"go.viam.com/rdk/vision/classification"
 	objdet "go.viam.com/rdk/vision/objectdetection"
 )
 
 // A track stores information about the bounding box as well as its persistence properties
 // across frames
 type track struct {
-	Det              objdet.Detection
-	persistenceLimit int
-	persistenceCount int
-	stable           bool
+	Det               objdet.Detection
+	detClassification classification.Classification
+	persistenceLimit  int
+	persistenceCount  int
+	stable            bool
 }
 
 // newTrack turns a bounding box into a new track with a fresh persistence counter
 func newTrack(det objdet.Detection, lim int) *track {
-	return &track{det, lim, 0, false}
+	return &track{det, nil, lim, 0, false}
 }
 
 // newTracks turns a slice of bounding boxes into a track with a fresh persistence counter
@@ -35,6 +37,8 @@ func newTracks(dets []objdet.Detection, lim int) []*track {
 func (tr *track) clone() *track {
 	return &track{
 		tr.Det,
+
+		tr.detClassification,
 		tr.persistenceLimit,
 		tr.persistenceCount,
 		tr.stable,
@@ -57,6 +61,16 @@ func (tr *track) addPersistence() {
 	}
 }
 
+func (tr *track) addClassificationToLabel(c string) *track {
+	if tr.detClassification != nil {
+		// Find it all up to and including the date and time
+		parts := strings.Split(tr.Det.Label(), "_")
+		labelNoClass := strings.Join(parts[:4], "_")
+		return ReplaceLabel(tr, labelNoClass+"_"+c)
+	}
+	return tr
+}
+
 // return only the bounding boxes associated with stable tracks
 func getStableDetections(tracks []*track) []objdet.Detection {
 	dets := make([]objdet.Detection, 0, len(tracks))
@@ -70,23 +84,26 @@ func getStableDetections(tracks []*track) []objdet.Detection {
 
 // trackedObject is the log info associated with the track that is stable
 type trackedObject struct {
-	FullLabel string
-	Label     string
-	Id        int
-	Time      string
+	FullLabel      string
+	Label          string
+	Id             int
+	Time           string
+	Classification string
 }
 
 func newTrackedObjectFromLabel(label string) (trackedObject, error) {
+	// Full label is in the form "object_count_date_time_classification"
 	parts := strings.Split(label, "_")
 	id, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return trackedObject{}, errors.Wrapf(err, "unable to parse label %v", label)
 	}
 	return trackedObject{
-		FullLabel: label,
-		Label:     parts[0],
-		Id:        id,
-		Time:      strings.Join(parts[2:], "_"),
+		FullLabel:      label,
+		Label:          parts[0],
+		Id:             id,
+		Time:           strings.Join(parts[2:4], "_"),
+		Classification: strings.Join(parts[4:], "_"),
 	}, nil
 
 }
