@@ -4,16 +4,18 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"path/filepath"
 	"testing"
 
 	hg "github.com/charles-haynes/munkres"
 	"go.viam.com/rdk/components/camera"
+	"go.viam.com/rdk/gostream"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/rimage"
 	"go.viam.com/rdk/services/vision"
 	"go.viam.com/rdk/testutils/inject"
-	"go.viam.com/rdk/utils"
+	"go.viam.com/rdk/vision/classification"
 	objdet "go.viam.com/rdk/vision/objectdetection"
 	"go.viam.com/test"
 )
@@ -34,11 +36,29 @@ func (fd *FakeDetector) fakeDetections() []objdet.Detection {
 	return fd.res[fd.it-1]
 }
 
+type FakeCam struct {
+	img image.Image
+}
+
+func (fc *FakeCam) Next(ctx context.Context) (data image.Image, release func(), err error) {
+	fP, _ := filepath.Abs("../test_files/dogscute.jpeg")
+	fc.img, err = rimage.NewImageFromFile(fP)
+	if err != nil {
+		fmt.Println(err)
+		return nil, nil, err
+	}
+	return fc.img, nil, nil
+}
+
+func (fc *FakeCam) Close(ctx context.Context) error {
+	return nil
+}
+
 func checkLabel(t *testing.T, value *track, target string) {
 	test.That(t, value.Det.Label()[:len(target)], test.ShouldEqual, target)
 }
 
-func getTracker() (vision.Service, error) { //nolint:unused
+func getTracker() (vision.Service, error) {
 
 	ctx := context.Background()
 	logger := logging.NewLogger("test")
@@ -54,19 +74,10 @@ func getTracker() (vision.Service, error) { //nolint:unused
 	fd := &FakeDetector{
 		res: [][]objdet.Detection{detsT0, detsT1, detsT2, detsT3},
 	}
+	fc := &FakeCam{}
 	cam := &inject.Camera{
-		ImageFunc: func(ctx context.Context, mimeType string, extra map[string]interface{}) ([]byte, camera.ImageMetadata, error) {
-			img, err := rimage.NewImageFromFile("./test_files/dogscute.jpeg")
-			if err != nil {
-				fmt.Println(err)
-				panic(err)
-			}
-			imgBytes, err := rimage.EncodeImage(ctx, img, utils.MimeTypeJPEG)
-			if err != nil {
-				fmt.Println(err)
-				panic(err)
-			}
-			return imgBytes, camera.ImageMetadata{MimeType: utils.MimeTypeJPEG}, nil
+		StreamFunc: func(ctx context.Context, errHandlers ...gostream.ErrorHandler) (gostream.VideoStream, error) {
+			return fc, nil
 		},
 	}
 	detector := &inject.VisionService{
@@ -74,10 +85,15 @@ func getTracker() (vision.Service, error) { //nolint:unused
 			return fd.fakeDetections(), nil
 		},
 	}
+	classifier := &inject.VisionService{
+		ClassificationsFunc: func(ctx context.Context, img image.Image, n int, extra map[string]interface{}) (classification.Classifications, error) {
+			return []classification.Classification{classification.NewClassification(0.99, "bald")}, nil
+		},
+	}
 
 	//reg, ok := resource.LookupRegistration(vision.API, Model)
 
-	OTConfig := &Config{CameraName: "camera", DetectorName: "detector"}
+	OTConfig := &Config{CameraName: "camera", DetectorName: "detector", PizzaClassifierName: "classifier"}
 	realConf := resource.Config{
 		Name:                "test-objtracker",
 		API:                 vision.API,
@@ -86,6 +102,7 @@ func getTracker() (vision.Service, error) { //nolint:unused
 	deps := resource.Dependencies{}
 	deps[camera.Named("camera")] = cam
 	deps[vision.Named("detector")] = detector
+	deps[vision.Named("classifier")] = classifier
 
 	out, err := newTracker(ctx, deps, realConf, logger)
 	if err != nil {
@@ -95,6 +112,19 @@ func getTracker() (vision.Service, error) { //nolint:unused
 
 	return out, nil
 
+}
+
+func TestGetProperties(t *testing.T) {
+	tracker, err := getTracker()
+	test.That(t, tracker, test.ShouldNotBeNil)
+	test.That(t, err, test.ShouldBeNil)
+
+	ctx := context.Background()
+	props, err := tracker.GetProperties(ctx, nil)
+	test.That(t, props.ClassificationSupported, test.ShouldEqual, true)
+	test.That(t, props.DetectionSupported, test.ShouldEqual, true)
+	test.That(t, props.ObjectPCDsSupported, test.ShouldEqual, false)
+	test.That(t, err, test.ShouldBeNil)
 }
 
 func TestValidate(t *testing.T) {
