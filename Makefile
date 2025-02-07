@@ -1,4 +1,10 @@
 
+test:
+	go test -v ./...
+
+lint:
+	golangci-lint run --timeout 10m
+
 module.tar.gz:
 	go build -a -o module main.go
 	tar -czf $@ module
