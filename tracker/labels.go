@@ -5,7 +5,6 @@
 package tracker
 
 import (
-	"fmt"
 	"image"
 	"strconv"
 	"strings"
@@ -21,8 +20,7 @@ const (
 
 // GetTimestamp will retrieve and format a timestamp to be YYYYMMDD_HHMMSS
 func GetTimestamp() string {
-	currTime := time.Now()
-	return fmt.Sprintf(currTime.Format("20060102_150405"))
+	return time.Now().Format("20060102_150405")
 }
 
 // ReplaceLabel replaces the detection with an almost identical detection (new label)
