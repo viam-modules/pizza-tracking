@@ -7,7 +7,9 @@
   "models": [
     {
       "api": "rdk:service:vision",
-      "model": "viam:vision:pizza-tracker"
+      "model": "viam:vision:pizza-tracker",
+      "markdown_link": "README.md#example-attributes",
+      "short_description": "A vision service that tracks pizza"
     }
   ],
   "build": {
