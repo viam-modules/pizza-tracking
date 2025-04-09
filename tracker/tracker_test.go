@@ -9,12 +9,12 @@ import (
 
 	hg "github.com/charles-haynes/munkres"
 	"go.viam.com/rdk/components/camera"
-	"go.viam.com/rdk/gostream"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/rimage"
 	"go.viam.com/rdk/services/vision"
 	"go.viam.com/rdk/testutils/inject"
+	"go.viam.com/rdk/utils"
 	"go.viam.com/rdk/vision/classification"
 	objdet "go.viam.com/rdk/vision/objectdetection"
 	"go.viam.com/rdk/vision/viscapture"
@@ -64,9 +64,10 @@ func getTracker() (vision.Service, error) {
 	ctx := context.Background()
 	logger := logging.NewLogger("test")
 
-	det0 := objdet.NewDetection(image.Rect(0, 0, 10, 10), 1, LabelDet0)
-	det1 := objdet.NewDetection(image.Rect(20, 20, 30, 30), 1, LabelDet1)
-	det1_1 := objdet.NewDetection(image.Rect(22, 22, 33, 33), 1, LabelDet1)
+	imageBounds := image.Rect(0, 0, 50, 50)
+	det0 := objdet.NewDetection(imageBounds, image.Rect(0, 0, 10, 10), 1, LabelDet0)
+	det1 := objdet.NewDetection(imageBounds, image.Rect(20, 20, 30, 30), 1, LabelDet1)
+	det1_1 := objdet.NewDetection(imageBounds, image.Rect(22, 22, 33, 33), 1, LabelDet1)
 	detsT0 := []objdet.Detection{det0, det1}
 	detsT1 := []objdet.Detection{det0}
 	detsT2 := []objdet.Detection{det1_1}
@@ -75,10 +76,19 @@ func getTracker() (vision.Service, error) {
 	fd := &FakeDetector{
 		res: [][]objdet.Detection{detsT0, detsT1, detsT2, detsT3},
 	}
-	fc := &FakeCam{}
 	cam := &inject.Camera{
-		StreamFunc: func(ctx context.Context, errHandlers ...gostream.ErrorHandler) (gostream.VideoStream, error) {
-			return fc, nil
+		ImageFunc: func(ctx context.Context, mimeType string, extra map[string]interface{}) ([]byte, camera.ImageMetadata, error) {
+			img, err := rimage.NewImageFromFile("../test_files/dogscute.jpeg")
+			if err != nil {
+				fmt.Println(err)
+				panic(err)
+			}
+			imgBytes, err := rimage.EncodeImage(ctx, img, utils.MimeTypeJPEG)
+			if err != nil {
+				fmt.Println(err)
+				panic(err)
+			}
+			return imgBytes, camera.ImageMetadata{MimeType: utils.MimeTypeJPEG}, nil
 		},
 	}
 	detector := &inject.VisionService{
@@ -166,9 +176,10 @@ func TestEmptyConfig(t *testing.T) {
 }
 
 func TestTracker(t *testing.T) {
-	det0 := objdet.NewDetection(image.Rect(0, 0, 10, 10), 1, LabelDet0)
-	det1 := objdet.NewDetection(image.Rect(20, 20, 30, 30), 1, LabelDet1)
-	det1_1 := objdet.NewDetection(image.Rect(22, 22, 33, 33), 1, LabelDet1)
+	imageBounds := image.Rect(0, 0, 50, 50)
+	det0 := objdet.NewDetection(imageBounds, image.Rect(0, 0, 10, 10), 1, LabelDet0)
+	det1 := objdet.NewDetection(imageBounds, image.Rect(20, 20, 30, 30), 1, LabelDet1)
+	det1_1 := objdet.NewDetection(imageBounds, image.Rect(22, 22, 33, 33), 1, LabelDet1)
 	detsT0 := []objdet.Detection{det0, det1}
 	detsT1 := []objdet.Detection{det0}
 	detsT2 := []objdet.Detection{det1_1}
@@ -408,4 +419,34 @@ func TestInvalidCameraNamesError(t *testing.T) {
 	// Test empty (valid) camera name in CaptureAllFromCamera
 	_, err = fakeTracker.CaptureAllFromCamera(ctx, "", viscapture.CaptureOptions{ReturnImage: true}, emptyMap)
 	test.That(t, err, test.ShouldBeNil)
+}
+
+func TestImageBoundsFromDet(t *testing.T) {
+	bounds := image.Rect(0, 0, 50, 50)
+	det := objdet.NewDetection(bounds, image.Rect(0, 0, 10, 10), 1, LabelDet0)
+	imgBounds := ImageBoundsFromDet(det)
+	test.That(t, *imgBounds, test.ShouldResemble, bounds)
+
+	// Test with no bounds
+	det = objdet.NewDetectionWithoutImgBounds(image.Rect(0, 0, 10, 10), 1, LabelDet0)
+	imgBounds = ImageBoundsFromDet(det)
+	test.That(t, imgBounds, test.ShouldEqual, nil)
+}
+
+func TestReplaceLabelsAndBoundingBox(t *testing.T) {
+	bounds := image.Rect(0, 0, 50, 50)
+	det := objdet.NewDetection(bounds, image.Rect(0, 0, 10, 10), 1, LabelDet0)
+	test.That(t, det, test.ShouldNotBeNil)
+	test.That(t, det.Label(), test.ShouldEqual, LabelDet0)
+	tr := newTrack(det, 50)
+
+	newLabel := "dog"
+	replacedTrack := ReplaceLabel(tr, newLabel)
+	test.That(t, replacedTrack.Det.Label(), test.ShouldEqual, newLabel)
+	test.That(t, replacedTrack.Det.NormalizedBoundingBox(), test.ShouldResemble, []float64{0, 0, 0.2, 0.2})
+
+	newBB := image.Rect(20, 20, 30, 30)
+	replacedTrack = ReplaceBoundingBox(tr, &newBB)
+	test.That(t, replacedTrack.Det.BoundingBox(), test.ShouldResemble, &newBB)
+	test.That(t, replacedTrack.Det.NormalizedBoundingBox(), test.ShouldResemble, []float64{0.4, 0.4, 0.6, 0.6})
 }
