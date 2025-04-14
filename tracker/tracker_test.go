@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"image"
-	"path/filepath"
 	"testing"
 
 	hg "github.com/charles-haynes/munkres"
@@ -14,7 +13,6 @@ import (
 	"go.viam.com/rdk/rimage"
 	"go.viam.com/rdk/services/vision"
 	"go.viam.com/rdk/testutils/inject"
-	"go.viam.com/rdk/utils"
 	"go.viam.com/rdk/vision/classification"
 	objdet "go.viam.com/rdk/vision/objectdetection"
 	"go.viam.com/rdk/vision/viscapture"
@@ -35,24 +33,6 @@ type FakeDetector struct {
 func (fd *FakeDetector) fakeDetections() []objdet.Detection {
 	fd.it += 1
 	return fd.res[fd.it-1]
-}
-
-type FakeCam struct {
-	img image.Image
-}
-
-func (fc *FakeCam) Next(ctx context.Context) (data image.Image, release func(), err error) {
-	fP, _ := filepath.Abs("../test_files/dogscute.jpeg")
-	fc.img, err = rimage.NewImageFromFile(fP)
-	if err != nil {
-		fmt.Println(err)
-		return nil, nil, err
-	}
-	return fc.img, nil, nil
-}
-
-func (fc *FakeCam) Close(ctx context.Context) error {
-	return nil
 }
 
 func checkLabel(t *testing.T, value *track, target string) {
@@ -80,15 +60,13 @@ func getTracker() (vision.Service, error) {
 		ImageFunc: func(ctx context.Context, mimeType string, extra map[string]interface{}) ([]byte, camera.ImageMetadata, error) {
 			img, err := rimage.NewImageFromFile("../test_files/dogscute.jpeg")
 			if err != nil {
-				fmt.Println(err)
-				panic(err)
+				return nil, camera.ImageMetadata{}, err
 			}
-			imgBytes, err := rimage.EncodeImage(ctx, img, utils.MimeTypeJPEG)
+			imgBytes, err := rimage.EncodeImage(ctx, img, mimeType)
 			if err != nil {
-				fmt.Println(err)
-				panic(err)
+				return nil, camera.ImageMetadata{}, err
 			}
-			return imgBytes, camera.ImageMetadata{MimeType: utils.MimeTypeJPEG}, nil
+			return imgBytes, camera.ImageMetadata{MimeType: mimeType}, nil
 		},
 	}
 	detector := &inject.VisionService{
