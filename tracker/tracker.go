@@ -402,16 +402,16 @@ func (t *myTracker) Reconfigure(ctx context.Context, deps resource.Dependencies,
 
 	t.chosenLabels = trackerConfig.ChosenLabels
 	t.camName = trackerConfig.CameraName
-	t.cam, err = camera.FromDependencies(deps, trackerConfig.CameraName)
+	t.cam, err = camera.FromProvider(deps, trackerConfig.CameraName)
 	if err != nil {
 		return errors.Wrapf(err, "unable to get camera %v for object tracker", trackerConfig.CameraName)
 	}
-	t.detector, err = vision.FromDependencies(deps, trackerConfig.DetectorName)
+	t.detector, err = vision.FromProvider(deps, trackerConfig.DetectorName)
 	if err != nil {
 		return errors.Wrapf(err, "unable to get detector %v for object tracker", trackerConfig.DetectorName)
 	}
 	if trackerConfig.PizzaClassifierName != "" {
-		t.pizzaClassifier, err = vision.FromDependencies(deps, trackerConfig.PizzaClassifierName)
+		t.pizzaClassifier, err = vision.FromProvider(deps, trackerConfig.PizzaClassifierName)
 		if err != nil {
 			return errors.Wrapf(err, "unable to get pizzaClassifier %v for object tracker", trackerConfig.PizzaClassifierName)
 		}
