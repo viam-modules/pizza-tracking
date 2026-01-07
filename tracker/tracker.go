@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.viam.com/rdk/utils"
 	"go.viam.com/rdk/vision/viscapture"
 
 	"image"
@@ -130,7 +129,7 @@ func newTracker(ctx context.Context, deps resource.Dependencies, conf resource.C
 	// Do the first pass to populate the first set of 2 detections.
 	starterDets := make([][]*track, 2)
 	for i := range 2 {
-		img, err := camera.DecodeImageFromCamera(cancelableCtx, utils.MimeTypeJPEG, nil, t.cam)
+		img, err := camera.DecodeImageFromCamera(cancelableCtx, t.cam, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -201,7 +200,7 @@ func (t *myTracker) run(cancelableCtx context.Context) {
 		default:
 			start := time.Now()
 			// Take fresh detections from fresh image
-			img, err := camera.DecodeImageFromCamera(cancelableCtx, "", nil, t.cam)
+			img, err := camera.DecodeImageFromCamera(cancelableCtx, t.cam, nil, nil)
 			if err != nil {
 				t.logger.Errorf("can't get image. got err: %s", err)
 				continue
@@ -329,24 +328,24 @@ type Config struct {
 
 // Validate validates the config and returns implicit dependencies,
 // this Validate checks if the camera and detector(vision svc) exist for the module's vision model.
-func (cfg *Config) Validate(path string) ([]string, error) {
+func (cfg *Config) Validate(path string) ([]string, []string, error) {
 	if cfg.MinTrackPersistence < 0 {
-		return nil, errors.New("attribute min_track_persistence cannot be less than 0")
+		return nil, nil, errors.New("attribute min_track_persistence cannot be less than 0")
 	}
 	// this makes them required for the model to successfully build
 	if cfg.CameraName == "" {
-		return nil, fmt.Errorf(`expected "camera_name" attribute for object tracker %q`, path)
+		return nil, nil, fmt.Errorf(`expected "camera_name" attribute for object tracker %q`, path)
 	}
 	if cfg.DetectorName == "" {
-		return nil, fmt.Errorf(`expected "detector_name" attribute for object tracker %q`, path)
+		return nil, nil, fmt.Errorf(`expected "detector_name" attribute for object tracker %q`, path)
 	}
 
 	if cfg.PizzaClassifierName == "" {
-		return []string{cfg.CameraName, cfg.DetectorName}, nil
+		return []string{cfg.CameraName, cfg.DetectorName}, nil, nil
 	}
 
 	// Return the resource names so that newTracker can access them as dependencies.
-	return []string{cfg.CameraName, cfg.DetectorName, cfg.PizzaClassifierName}, nil
+	return []string{cfg.CameraName, cfg.DetectorName, cfg.PizzaClassifierName}, nil, nil
 }
 
 // Reconfigure reconfigures with new settings.

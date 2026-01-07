@@ -8,6 +8,7 @@ import (
 
 	hg "github.com/charles-haynes/munkres"
 	"go.viam.com/rdk/components/camera"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/rimage"
@@ -57,16 +58,16 @@ func getTracker() (vision.Service, error) {
 		res: [][]objdet.Detection{detsT0, detsT1, detsT2, detsT3},
 	}
 	cam := &inject.Camera{
-		ImageFunc: func(ctx context.Context, mimeType string, extra map[string]interface{}) ([]byte, camera.ImageMetadata, error) {
+		ImagesFunc: func(ctx context.Context, filterSourceNames []string, extra map[string]interface{}) ([]camera.NamedImage, resource.ResponseMetadata, error) {
 			img, err := rimage.NewImageFromFile("../test_files/dogscute.jpeg")
 			if err != nil {
-				return nil, camera.ImageMetadata{}, err
+				return nil, resource.ResponseMetadata{}, err
 			}
-			imgBytes, err := rimage.EncodeImage(ctx, img, mimeType)
+			namedImg, err := camera.NamedImageFromImage(img, "test-camera", "image/jpeg", data.Annotations{})
 			if err != nil {
-				return nil, camera.ImageMetadata{}, err
+				return nil, resource.ResponseMetadata{}, err
 			}
-			return imgBytes, camera.ImageMetadata{MimeType: mimeType}, nil
+			return []camera.NamedImage{namedImg}, resource.ResponseMetadata{}, nil
 		},
 	}
 	detector := &inject.VisionService{
@@ -119,25 +120,25 @@ func TestGetProperties(t *testing.T) {
 func TestValidate(t *testing.T) {
 	// empty cfg
 	emptyCfg := Config{}
-	emptyDeps, err := emptyCfg.Validate("")
+	emptyDeps, _, err := emptyCfg.Validate("")
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, emptyDeps, test.ShouldBeNil)
 
 	// good cfg
 	goodCfg := Config{CameraName: "camera", DetectorName: "detector"}
-	goodDeps, err := goodCfg.Validate("")
+	goodDeps, _, err := goodCfg.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, goodDeps, test.ShouldNotBeNil)
 
 	// another good cfg
 	goodCfg2 := Config{CameraName: "camera", DetectorName: "detector", PizzaClassifierName: "classifier"}
-	goodDeps, err = goodCfg2.Validate("")
+	goodDeps, _, err = goodCfg2.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, goodDeps, test.ShouldNotBeNil)
 
 	// bad cfg
 	badCfg := Config{CameraName: "camera"}
-	badDeps, err := badCfg.Validate("")
+	badDeps, _, err := badCfg.Validate("")
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, badDeps, test.ShouldBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "detector_name")
