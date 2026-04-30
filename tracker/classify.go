@@ -7,6 +7,8 @@ import (
 	"image"
 	"image/draw"
 
+	"go.viam.com/rdk/components/camera"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/services/vision"
 	objdet "go.viam.com/rdk/vision/objectdetection"
@@ -14,14 +16,25 @@ import (
 
 // method will take a slice of tracks and return a slice of tracks.
 // The only difference is that the track will now include the detection classification
-func classifyTracks(ctx context.Context, tracks []*track, img image.Image, classifier vision.Service, logger logging.Logger) []*track {
+func classifyTracks(ctx context.Context, tracks []*track, img *camera.NamedImage, classifier vision.Service, logger logging.Logger) []*track {
 	if classifier == nil {
 		return tracks
 	}
 
+	rawImg, err := img.Image(ctx)
+	if err != nil {
+		logger.Warnf("error decoding image for classification: %v", err)
+		return tracks
+	}
+
 	for _, tr := range tracks {
-		cropped := cropImageFromDet(img, tr.Det)
-		out, err := classifier.Classifications(ctx, cropped, 1, nil)
+		cropped := cropImageFromDet(rawImg, tr.Det)
+		croppedNamed, err := camera.NamedImageFromImage(cropped, img.SourceName, img.MimeType(), data.Annotations{})
+		if err != nil {
+			logger.Warnf("error wrapping cropped image: %v", err)
+			continue
+		}
+		out, err := classifier.Classifications(ctx, &croppedNamed, 1, nil)
 		if err != nil || len(out) < 1 {
 			// if there is an error, just skip the classification
 			logger.Warnf("error classifying detection: %v", err)
