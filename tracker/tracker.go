@@ -19,6 +19,7 @@ import (
 	"go.viam.com/rdk/services/vision"
 	vis "go.viam.com/rdk/vision"
 	"go.viam.com/rdk/vision/classification"
+	"go.viam.com/rdk/vision/detection3d"
 	objdet "go.viam.com/rdk/vision/objectdetection"
 	viamutils "go.viam.com/utils"
 )
@@ -487,6 +488,14 @@ func (t *myTracker) GetObjectPointClouds(
 	cameraName string,
 	extra map[string]interface{},
 ) ([]*vis.Object, error) {
+	return nil, errUnimplemented
+}
+
+func (t *myTracker) GetDetections3D(
+	ctx context.Context,
+	cameraName string,
+	extra map[string]interface{},
+) ([]*detection3d.Detection, error) {
 	return nil, errUnimplemented
 }
 
